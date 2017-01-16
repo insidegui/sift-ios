@@ -62,6 +62,8 @@ static const NSTimeInterval SF_MOTION_SENSOR_INTERVAL = 0.5;  // Unit: second.
     dispatch_source_t _source;
     NSString *_archivePath;
     CLLocationManager *_locationManager;
+    
+    int _serialSuspendCountToWorkaroundIssue51;
 
     //// Motion sensors.
 
@@ -88,6 +90,8 @@ static const NSTimeInterval SF_MOTION_SENSOR_INTERVAL = 0.5;  // Unit: second.
         _archivePath = archivePath;
         _locationManager = [CLLocationManager new];
 
+        _serialSuspendCountToWorkaroundIssue51 = 0;
+        
         [self unarchive];
 
         NSNotificationCenter *notificationCenter = [NSNotificationCenter defaultCenter];
@@ -135,7 +139,14 @@ static const NSTimeInterval SF_MOTION_SENSOR_INTERVAL = 0.5;  // Unit: second.
 }
 
 - (void)willEnterForeground {
+    if (_serialSuspendCountToWorkaroundIssue51 <= 0) {
+        SF_DEBUG(@"[Sift 51 Workaround] Refusing to resume serial queue (already resumed). Suspend count: %d", _serialSuspendCountToWorkaroundIssue51);
+        return;
+    }
+    
     dispatch_resume(_serial);
+    _serialSuspendCountToWorkaroundIssue51--;
+    SF_DEBUG(@"[Sift 51 Workaround] Resumed serial queue. Suspend count: %d", _serialSuspendCountToWorkaroundIssue51);
 }
 
 - (void)didBecomeActive {
@@ -152,6 +163,8 @@ static const NSTimeInterval SF_MOTION_SENSOR_INTERVAL = 0.5;  // Unit: second.
         [self stopMotionSensors];
         [_locationManager stopUpdatingHeading];
         dispatch_suspend(_serial);
+        _serialSuspendCountToWorkaroundIssue51++;
+        SF_DEBUG(@"[Sift 51 Workaround] Suspended serial queue. Suspend count: %d", _serialSuspendCountToWorkaroundIssue51);
     });
 }
 
